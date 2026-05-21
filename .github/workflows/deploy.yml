@@ -12,21 +12,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Deploy via FTP to Hostinger
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: /public_html/
-          # Exclude files that must NOT be overwritten on the server
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            .github/**
-            README.md
-            wp-config.php
-            wp-content/uploads/**
-            wp-content/cache/**
-            wp-content/upgrade/**
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p 65002 72.61.66.116 >> ~/.ssh/known_hosts
+
+      - name: Deploy via rsync over SSH
+        run: |
+          rsync -avz --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='README.md' \
+            --exclude='wp-config.php' \
+            --exclude='wp-content/uploads/' \
+            --exclude='wp-content/cache/' \
+            --exclude='wp-content/upgrade/' \
+            -e "ssh -p 65002 -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ u979793747_OPuOsKi4J@72.61.66.116:public_html/
