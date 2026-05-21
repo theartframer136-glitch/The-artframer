@@ -1,0 +1,35 @@
+# WordPress sensitive config — never commit this
+wp-config.php
+wp-config-local.php
+
+# Uploads (media library — too large for git, managed on server)
+wp-content/uploads/
+
+# WordPress cache and generated files
+wp-content/cache/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+
+# Log files
+*.log
+error_log
+debug.log
+wp-content/debug.log
+
+# OS & editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node (if using build tools for theme)
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
