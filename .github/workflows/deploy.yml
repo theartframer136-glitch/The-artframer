@@ -2,12 +2,11 @@ name: Deploy to Hostinger
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  deploy:
+  test-ssh:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,33 +18,14 @@ jobs:
           printf '%s\n' '${{ secrets.SSH_PRIVATE_KEY }}' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      - name: Debug SSH key
+      - name: Test SSH connection + discover paths
         run: |
-          echo "Key file size: $(wc -c < ~/.ssh/id_rsa) bytes"
-          echo "First line: $(head -1 ~/.ssh/id_rsa)"
-          echo "Last line: $(tail -1 ~/.ssh/id_rsa)"
-          echo "Line count: $(wc -l < ~/.ssh/id_rsa)"
-          ssh-keygen -y -f ~/.ssh/id_rsa | head -c 200 || echo "KEY PARSE FAILED"
-          echo ""
-
-      - name: Discover server paths (verbose SSH)
-        run: |
-          ssh -vvv -p 65002 -i ~/.ssh/id_rsa \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -o PreferredAuthentications=publickey \
+          ssh -p 65002 -i ~/.ssh/id_rsa \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             u979793747_OPuOsKi4J@72.61.66.116 \
-            "echo '=== pwd ===' && pwd && echo '=== HOME ===' && echo \$HOME && echo '=== find ===' && find \$HOME -maxdepth 4 -name 'public_html' -type d 2>/dev/null" 2>&1 | tail -60
-
-      - name: Deploy via rsync over SSH
-        run: |
-          rsync -avz --delete \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='README.md' \
-            --exclude='wp-config.php' \
-            --exclude='wp-content/uploads/' \
-            --exclude='wp-content/cache/' \
-            --exclude='wp-content/upgrade/' \
-            -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            ./ u979793747_OPuOsKi4J@72.61.66.116:domains/theartframer.us/public_html/
+            'echo "=== SSH_OK ===";
+             echo "=== pwd ==="; pwd;
+             echo "=== HOME ==="; echo $HOME;
+             echo "=== ls home ==="; ls -la $HOME;
+             echo "=== WP root ==="; ls -la /home/u979793747/websites/OPuOsKi4J/public_html/wp-content/themes/ 2>/dev/null || echo "path not found, trying alternates";
+             echo "=== find public_html ==="; find $HOME -maxdepth 5 -name "public_html" -type d 2>/dev/null'
