@@ -15,9 +15,10 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p 65002 72.61.66.116 >> ~/.ssh/known_hosts
+          ssh-keygen -R "[72.61.66.116]:65002" 2>/dev/null || true
+          ssh-keyscan -p 65002 -H 72.61.66.116 >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy via rsync over SSH
         run: |
