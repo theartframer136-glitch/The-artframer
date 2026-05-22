@@ -1,4 +1,4 @@
-name: Deploy Theme
+name: Deploy to Hostinger
 on:
   push:
     branches: [ main ]
@@ -9,69 +9,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
-      - name: Setup SSH
+      - name: Setup SSH key
         run: |
-          set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.HOSTINGER_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          cat > ~/.ssh/config <<'EOF'
-          Host *
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-          EOF
+          printf '%s\n' '${{ secrets.SFTP_PRIVATE_KEY }}' | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null && echo "key parses OK" || echo "key parse FAILED"
 
-      - name: Deploy + reset caches
+      - name: Deploy theme
         run: |
-          set -euo pipefail
-          USER="${{ secrets.HOSTINGER_USERNAME }}"
-          HOST="${{ secrets.HOSTINGER_HOST }}"
-          PORT="${{ secrets.HOSTINGER_PORT }}"
-          THEME="postero-child"
-          SITE_URL="https://theartframer.us"
-          SSH="ssh -p ${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-          # 1) Auto-discover the writable theme path
-          CANDIDATES=(
-            "websites/OPuOsKi4J/public_html/wp-content/themes/${THEME}"
-            "public_html/wp-content/themes/${THEME}"
-            "domains/theartframer.us/public_html/wp-content/themes/${THEME}"
-          )
-          TARGET=""
-          for p in "${CANDIDATES[@]}"; do
-            if ${SSH} "${USER}@${HOST}" "test -d '${p%/*}' && test -w '${p%/*}'"; then TARGET="$p"; break; fi
-          done
-          if [ -z "${TARGET}" ]; then
-            echo "No writable theme path found:"
-            ${SSH} "${USER}@${HOST}" "pwd; ls -la; ls -la public_html/wp-content/themes 2>/dev/null || true"
-            exit 1
-          fi
-          echo "Deploying to: ${TARGET}"
-
-          # 2) Sync theme subfolder (nuvio style)
           rsync -avz --delete \
             --exclude ".git" --exclude ".github" --exclude ".vscode" --exclude "node_modules" \
-            --exclude ".gitkeep" --exclude "screenshot.jpg" \
-            -e "${SSH}" \
+            --exclude ".gitkeep" --exclude "screenshot.jpg" --exclude "docs" --exclude "README.md" \
+            -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             ./postero-child/ \
-            "${USER}@${HOST}:${TARGET}/"
+            u979793747_OPuOsKi4J@72.61.66.116:/home/u979793747/websites/OPuOsKi4J/public_html/wp-content/themes/postero-child/
 
-          # 3a) LiteSpeed + object cache via WP-CLI
-          WPROOT="${TARGET%/wp-content/themes/*}"
-          ${SSH} "${USER}@${HOST}" \
-            "cd '${WPROOT}'; \
+      - name: Purge cache (LiteSpeed + object cache)
+        run: |
+          ssh -p 65002 -i ~/.ssh/id_rsa \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            u979793747_OPuOsKi4J@72.61.66.116 \
+            'set -e; WPROOT=/home/u979793747/websites/OPuOsKi4J/public_html; cd "$WPROOT"; \
              if command -v wp >/dev/null 2>&1; then WP=wp; \
-             else curl -sSLO https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar; chmod +x wp-cli.phar; WP='php wp-cli.phar'; fi; \
-             \$WP litespeed-purge all --path='${WPROOT}' 2>/dev/null || true; \
-             \$WP cache flush --path='${WPROOT}' 2>/dev/null || true; \
-             echo 'litespeed/object cache purged'"
-
-          # 3b) PHP OPcache reset via HTTP-triggered temp script
-          set +e
-          OC=$(printf '%s' '<?php if(function_exists("opcache_reset")){opcache_reset();} echo "OC_OK";' | base64 -w0)
-          ${SSH} "${USER}@${HOST}" "echo '${OC}' | base64 -d > '${TARGET}/_oc.php'"
-          curl -fsS "${SITE_URL}/wp-content/themes/${THEME}/_oc.php" || echo "(opcache curl failed — non-fatal)"
-          ${SSH} "${USER}@${HOST}" "rm -f '${TARGET}/_oc.php'"
-          echo "Deploy + cache reset complete."
+             else curl -sSLO https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar; chmod +x wp-cli.phar; WP="php wp-cli.phar"; fi; \
+             $WP litespeed-purge all --path="$WPROOT" 2>/dev/null || true; \
+             $WP cache flush --path="$WPROOT" 2>/dev/null || true; \
+             echo "cache purge requested"'

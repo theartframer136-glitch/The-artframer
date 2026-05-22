@@ -1,14 +1,10 @@
 name: Set PHP Limits (.user.ini)
 
-# Write a .user.ini in the WP root with sane PHP limits — fixes Elementor 500s
-# (max_execution_time / max_input_vars exhaustion) per the §7 hardening notes.
-# Idempotent — running multiple times just re-writes the same file.
-
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "dry-run (show current file only) or commit (write new file)"
+        description: "dry-run or commit"
         required: true
         default: "dry-run"
         type: choice
@@ -18,45 +14,23 @@ jobs:
   set-limits:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup SSH
+      - name: Setup SSH key
         run: |
-          set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          cat > ~/.ssh/config <<'EOF'
-          Host *
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-          EOF
+          printf '%s\n' '${{ secrets.SFTP_PRIVATE_KEY }}' | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
       - name: Inspect / write .user.ini
         run: |
-          set -euo pipefail
-          USER="${{ secrets.HOSTINGER_USERNAME }}"
-          HOST="${{ secrets.HOSTINGER_HOST }}"
-          PORT="${{ secrets.HOSTINGER_PORT }}"
-          SSH="ssh -p ${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-          # Auto-discover WP root.
-          CANDIDATES=(
-            "/home/u979793747/websites/OPuOsKi4J/public_html"
-            "websites/OPuOsKi4J/public_html"
-            "public_html"
-          )
-          WPROOT=""
-          for p in "${CANDIDATES[@]}"; do
-            if ${SSH} "${USER}@${HOST}" "test -f '${p}/wp-config.php'"; then WPROOT="$p"; break; fi
-          done
-          [ -n "${WPROOT}" ] || { echo "WP root not found"; exit 1; }
-          echo "Using WP root: ${WPROOT}"
+          WPROOT=/home/u979793747/websites/OPuOsKi4J/public_html
+          SSH="ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
           echo "--- Current .user.ini (if any) ---"
-          ${SSH} "${USER}@${HOST}" "cat '${WPROOT}/.user.ini' 2>/dev/null || echo '(no .user.ini found)'"
+          $SSH u979793747_OPuOsKi4J@72.61.66.116 "cat '${WPROOT}/.user.ini' 2>/dev/null || echo '(no .user.ini found)'"
 
           if [ "${{ github.event.inputs.mode }}" = "commit" ]; then
-            echo "--- Writing new .user.ini ---"
-            ${SSH} "${USER}@${HOST}" "cat > '${WPROOT}/.user.ini' <<'EOF'
+            echo "--- Writing .user.ini ---"
+            $SSH u979793747_OPuOsKi4J@72.61.66.116 "cat > '${WPROOT}/.user.ini' <<'EOF'
           max_execution_time = 300
           max_input_time = 300
           max_input_vars = 10000
@@ -64,11 +38,7 @@ jobs:
           post_max_size = 64M
           upload_max_filesize = 64M
           EOF"
-            echo "--- Wrote: ---"
-            ${SSH} "${USER}@${HOST}" "cat '${WPROOT}/.user.ini'"
-            echo ""
-            echo "Note: .user.ini is read per-directory and cached for ~5 min by default."
-            echo "If Elementor still 500s, wait a few minutes or restart PHP-FPM via Hostinger panel."
+            $SSH u979793747_OPuOsKi4J@72.61.66.116 "cat '${WPROOT}/.user.ini'"
           else
-            echo "--- Dry-run, no changes written. Re-run with mode=commit to apply. ---"
+            echo "--- Dry-run only. Re-run with mode=commit to apply. ---"
           fi
