@@ -4,6 +4,8 @@
 .github/deploy_key_rsa.pub
 .github/hostinger_deploy
 .github/hostinger_deploy.pub
+.github/nuvio_style_key
+.github/nuvio_style_key.pub
 
 # WordPress sensitive config — never commit this
 wp-config.php
