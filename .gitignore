@@ -1,5 +1,9 @@
 # SSH deploy keys — never commit private key
 .github/deploy_key
+.github/deploy_key_rsa
+.github/deploy_key_rsa.pub
+.github/hostinger_deploy
+.github/hostinger_deploy.pub
 
 # WordPress sensitive config — never commit this
 wp-config.php
