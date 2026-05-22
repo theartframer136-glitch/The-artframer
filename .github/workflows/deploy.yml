@@ -16,16 +16,20 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' '${{ secrets.SFTP_PRIVATE_KEY }}' | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          # sanity-check: key must parse cleanly
           ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null && echo "✅ key parses OK" || echo "❌ key parse FAILED"
 
       - name: Deploy theme
         run: |
+          # Theme files now live at repo root. Excludes keep repo-only files
+          # (.github, docs, README, .gitignore) off the production server.
           rsync -avz --delete \
-            --exclude ".git" --exclude ".github" --exclude ".vscode" --exclude "node_modules" \
-            --exclude ".gitkeep" --exclude "screenshot.jpg" \
+            --exclude ".git" --exclude ".github" --exclude ".vscode" \
+            --exclude "node_modules" --exclude "docs" \
+            --exclude "README.md" --exclude ".gitignore" \
+            --exclude "screenshot.jpg" --exclude "screenshot.png" \
+            --exclude ".gitkeep" --exclude ".DS_Store" --exclude "Thumbs.db" \
             -e "ssh -p 65002 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            ./postero-child/ \
+            ./ \
             u979793747_OPuOsKi4J@72.61.66.116:/home/u979793747/websites/OPuOsKi4J/public_html/wp-content/themes/postero-child/
 
       - name: Purge cache (LiteSpeed + object cache)
