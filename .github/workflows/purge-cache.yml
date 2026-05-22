@@ -1,0 +1,64 @@
+name: Purge Caches (manual)
+
+# Manually triggered cache purge — LiteSpeed page + object cache via WP-CLI,
+# and PHP OPcache via an HTTP-triggered temp script. Useful when the site
+# looks stale without a code change.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          cat > ~/.ssh/config <<'EOF'
+          Host *
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+
+      - name: Purge LiteSpeed + object cache + OPcache
+        run: |
+          set -euo pipefail
+          USER="${{ secrets.HOSTINGER_USERNAME }}"
+          HOST="${{ secrets.HOSTINGER_HOST }}"
+          PORT="${{ secrets.HOSTINGER_PORT }}"
+          SITE_URL="https://theartframer.us"
+          SSH="ssh -p ${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          # Auto-discover WP root.
+          CANDIDATES=(
+            "/home/u979793747/websites/OPuOsKi4J/public_html"
+            "websites/OPuOsKi4J/public_html"
+            "public_html"
+          )
+          WPROOT=""
+          for p in "${CANDIDATES[@]}"; do
+            if ${SSH} "${USER}@${HOST}" "test -f '${p}/wp-config.php'"; then WPROOT="$p"; break; fi
+          done
+          [ -n "${WPROOT}" ] || { echo "WP root not found"; exit 1; }
+          echo "Using WP root: ${WPROOT}"
+
+          # LiteSpeed page + object cache via WP-CLI.
+          ${SSH} "${USER}@${HOST}" \
+            "cd '${WPROOT}'; \
+             if command -v wp >/dev/null 2>&1; then WP=wp; \
+             else curl -sSLO https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar; chmod +x wp-cli.phar; WP='php wp-cli.phar'; fi; \
+             \$WP litespeed-purge all --path='${WPROOT}' 2>/dev/null || true; \
+             \$WP cache flush --path='${WPROOT}' 2>/dev/null || true; \
+             echo 'litespeed/object cache purged'"
+
+          # PHP OPcache via HTTP-triggered temp script (non-fatal).
+          set +e
+          THEME_DIR="${WPROOT}/wp-content/themes/postero-child"
+          OC=$(printf '%s' '<?php if(function_exists("opcache_reset")){opcache_reset();} echo "OC_OK";' | base64 -w0)
+          ${SSH} "${USER}@${HOST}" "echo '${OC}' | base64 -d > '${THEME_DIR}/_oc.php'"
+          curl -fsS "${SITE_URL}/wp-content/themes/postero-child/_oc.php" || echo "(opcache curl failed — non-fatal)"
+          ${SSH} "${USER}@${HOST}" "rm -f '${THEME_DIR}/_oc.php'"
+          echo "All caches purged."

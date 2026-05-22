@@ -1,0 +1,71 @@
+name: Run WP Task (manual)
+
+# Generic WP-CLI runner template. Edit the eval-file path / wp commands
+# in the "Run via WP-CLI over SSH" step for the task you want to perform.
+# Always dry-run first — destructive ops only apply when mode=commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run (report only) or commit (apply changes)"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [ dry-run, commit ]
+
+jobs:
+  task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          cat > ~/.ssh/config <<'EOF'
+          Host *
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+
+      - name: Run via WP-CLI over SSH
+        run: |
+          set -euo pipefail
+          COMMIT_FLAG="0"
+          if [ "${{ github.event.inputs.mode }}" = "commit" ]; then COMMIT_FLAG="1"; fi
+
+          USER="${{ secrets.HOSTINGER_USERNAME }}"
+          HOST="${{ secrets.HOSTINGER_HOST }}"
+          PORT="${{ secrets.HOSTINGER_PORT }}"
+          SSH="ssh -p ${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          # Auto-discover the WP root (same logic as deploy.yml).
+          CANDIDATES=(
+            "/home/u979793747/websites/OPuOsKi4J/public_html"
+            "websites/OPuOsKi4J/public_html"
+            "public_html"
+            "domains/theartframer.us/public_html"
+          )
+          WPROOT=""
+          for p in "${CANDIDATES[@]}"; do
+            if ${SSH} "${USER}@${HOST}" "test -f '${p}/wp-config.php'"; then WPROOT="$p"; break; fi
+          done
+          if [ -z "${WPROOT}" ]; then echo "WP root not found"; exit 1; fi
+          echo "Using WP root: ${WPROOT}"
+
+          # --- EDIT BELOW: the actual task --------------------------------
+          # Example: list users (read-only, safe in either mode)
+          ${SSH} "${USER}@${HOST}" \
+            "set -e; cd '${WPROOT}'; \
+             if command -v wp >/dev/null 2>&1; then WP=wp; \
+             else curl -sSLO https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar; chmod +x wp-cli.phar; WP='php wp-cli.phar'; fi; \
+             export MY_COMMIT=${COMMIT_FLAG}; \
+             echo '--- WP version ---'; \$WP --version --path='${WPROOT}'; \
+             echo '--- PHP version ---'; php -v | head -1; \
+             echo '--- mode ---'; echo \"MY_COMMIT=\$MY_COMMIT\""
+          # ---------------------------------------------------------------
