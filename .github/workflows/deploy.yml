@@ -52,8 +52,14 @@ jobs:
           echo "Deploying to: ${TARGET}"
 
           # 2) Sync theme folder (postero-child subfolder layout)
+          #    --delete keeps server mirror clean, but we exclude assets WordPress
+          #    generates server-side (screenshot.jpg, .DS_Store, etc.) so they
+          #    survive deploys.
           rsync -avz --delete \
             --exclude ".git" --exclude ".github" --exclude ".vscode" --exclude "node_modules" \
+            --exclude ".gitkeep" \
+            --exclude "screenshot.jpg" --exclude "screenshot.png" \
+            --exclude ".DS_Store" --exclude "Thumbs.db" \
             -e "${SSH}" \
             ./postero-child/ \
             "${USER}@${HOST}:${TARGET}/"
