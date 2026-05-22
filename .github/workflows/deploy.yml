@@ -14,8 +14,10 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' '${{ secrets.SFTP_PRIVATE_KEY }}' > ~/.ssh/id_rsa
+          printf '%s\n' '${{ secrets.SFTP_PRIVATE_KEY }}' | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          # sanity-check: key must parse cleanly
+          ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null && echo "✅ key parses OK" || echo "❌ key parse FAILED"
 
       - name: Deploy theme
         run: |
